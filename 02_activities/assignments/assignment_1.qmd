@@ -19,92 +19,141 @@ Before fitting any models, it is essential to understand the data. Use R or bash
 
 (i) Read the .fam file. How many samples does the dataset contain?
 
-```         
-# Your answer here...
+```{r, message=FALSE,warning=FALSE}
+# Loading libraries
+library(data.table)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r,message=FALSE, warning=FALSE}         
+fam_all <- fread("../data/gwa.qc.A1.fam")
+colnames(fam_all) <- c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE")
+nrow(fam_all) #4000 samples
 ```
 
 (ii) What is the 'variable type' of the response variable (i.e.Continuous or binary)?
 
-```         
-# Your answer here...
+```{r,message=FALSE, warning=FALSE}          
+str(fam_all)
+summary(fam_all$PHENOTYPE) 
+# Continuous phenotype
 ```
 
 (iii) Read the .bim file. How many SNPs does the dataset contain?
 
-```         
-# Your answer here...
+```{r,message=FALSE, warning=FALSE}         
+bim_all<- data.table::fread("../data/gwa.qc.A1.bim")
+colnames(bim_all) <- c("CHR", "SNP", "CM", "BP", "A1", "A2")
+length(unique(bim_all$SNP)) #101083 SNPs
 ```
 
 #### Question 2: Allele Frequency Estimation
 
 (i) Load the genotype matrix for SNPs rs1861, rs3813199, rs3128342, and rs11804831 using additive coding. What are the allele frequencies (AFs) for these four SNPs?
 
-```         
-# Your code here...
+```{bash, eval=F, message=FALSE, warning=FALSE}  
+printf "%s\n" rs1861 rs3813199 rs3128342 rs11804831 > ../data/snplist.A1.txt
+plink2 --bfile ../data/gwa.qc.A1 \
+      --extract ../data/snplist.A1.txt \
+      --recode A \
+      --out ../data/geno.additive.A1
+
+plink2 --bfile ../data/gwa.qc.A1 --freq --out ../data/gwa_qc_afreq.A1     
+```
+```{r, message=FALSE, warning=FALSE}
+afreq <- fread("../data/gwa_qc_afreq.A1.afreq")
+afreq %>% filter(ID %in% c("rs1861", "rs3813199", "rs3128342", "rs11804831"))
+
+# The ALT_FREQS column gives the allele frequencies for the ALT allele, which in this case is the minor allele for all four SNPs. Major allele frequencies can be calculated as 1 - ALT_FREQS.
 ```
 
 (ii) What are the minor allele frequencies (MAFs) for these four SNPs?
 
-```         
-# Your code here...
+```{r, message=FALSE, warning=FALSE}         
+afreq %>% filter(ID %in% c("rs1861", "rs3813199", "rs3128342", "rs11804831")) %>%
+  mutate(MAF = ifelse(ALT_FREQS > 0.5, 1 - ALT_FREQS, ALT_FREQS)) %>%
+  select(ID, MAF)
 ```
 
 #### Question 3: Hardy–Weinberg Equilibrium (HWE) Test
 
 (i) Conduct the Hardy–Weinberg Equilibrium (HWE) test for all SNPs in the .bim file. Then, load the file containing the HWE p-value results and display the first few rows of the resulting data frame.
 
-```         
-# Your code here...
+```{bash, eval=F, message=FALSE, warning=FALSE}         
+plink2 --bfile ../data/gwa.qc.A1 --hardy --out ../data/gwa_qc_hwe.A1     
+```
+```{r, message=FALSE, warning=FALSE}
+hwe <- fread("../data/gwa_qc_hwe.A1.hardy")
+head(hwe)
 ```
 
 (ii) What are the HWE p-values for SNPs rs1861, rs3813199, rs3128342, and rs11804831?
 
-```         
-# Your code here...
+```{r, message=FALSE, warning=FALSE}         
+hwe %>% filter(ID %in% c("rs1861", "rs3813199", "rs3128342", "rs11804831")) %>% select(ID, P)
 ```
 
 #### Question 4: Genetic Association Test
 
 (i) Conduct a linear regression to test the association between SNP rs1861 and the phenotype. What is the p-value?
 
-```         
-# Your code here...
+```{r, message=FALSE, warning=FALSE}
+geno_additive <- fread("../data/geno.additive.A1.raw")
+sum(is.na(geno_additive$rs1861_C))   #36 with missing SNP info
+sum(is.na(geno_additive$PHENOTYPE))  #0
+
+# drop samples with missing genotype or phenotype data
+geno_additive <- geno_additive %>% filter(!is.na(rs1861_C) & !is.na(PHENOTYPE))
+summary(glm(PHENOTYPE ~ rs1861_C, data = geno_additive))
+
+# pvalue for rs1861_C is <2e-16 ***
 ```
 
 (ii) How would you interpret the beta coefficient from this regression?
 
-```         
-# Your answer here...
+```{r,eval=FALSE, message=FALSE, warning=FALSE}         
+# The beta coeficient for rs1861_C is 0.97382. This means that for each additional copy of the C allele at SNP rs1861, the phenotype increases by 0.97382 units, holding all other variables constant.
 ```
 
 (iii) Plot the scatterplot of phenotype versus the genotype of SNP rs1861. Add the regression line to the plot.
 
-```         
-# Your code here...
+```{r, message=FALSE, warning=FALSE}
+ggplot(geno_additive, aes(x = rs1861_C, y = PHENOTYPE)) + theme_bw(base_size = 14) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(x = "rs1861_C (additive coding)", y = "Phenotype")
 ```
 
 (iv) Convert the genotype coding for rs1861 to recessive coding.
 
-```         
-# Your code here...
+```{r, message=FALSE, warning=FALSE}
+geno_recessive <- geno_additive # make a copy
+geno_recessive[, 7:ncol(geno_recessive)] <- as.data.frame(
+  lapply(geno_recessive[, 7:ncol(geno_recessive)], function(x) ifelse(x == 2, 1, 0))
+)
 ```
 
 (v) Conduct a linear regression to test the association between the recessive-coded rs1861 and the phenotype. What is the p-value?
 
-```         
-# Your code here...
+```{r, message=FALSE, warning=FALSE}         
+summary(glm(PHENOTYPE ~ rs1861_C, data = geno_recessive))
+# pvalue for rs1861_C is <2e-16 ***
 ```
 
 (vi) Plot the scatterplot of phenotype versus the recessive-coded genotype of rs1861. Add the regression line to the plot.
 
-```         
-# Your code here...
+```{r, message=FALSE, warning=FALSE}
+ggplot(geno_recessive, aes(x = rs1861_C, y = PHENOTYPE)) + theme_bw(base_size = 14) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(x = "rs1861_C (recessive coding)", y = "Phenotype")
 ```
 
 (vii) Which model fits better? Justify your answer.
 
-```         
-# Your answer here...
+```{r,eval=FALSE, message=FALSE, warning=FALSE}
+# The AIC for the additive model is 11277, while the AIC for the recessive model is 11292. The additive model has a slightly lower AIC, indicating that it fits the data better than the recessive model.
 ```
 
 ### Criteria
