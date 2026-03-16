@@ -1,6 +1,8 @@
 ---
 title: "Assignment #1"
-format: html
+format:
+  html:
+    embed-resources: true
 ---
 
 ## Assignment 1
@@ -19,14 +21,14 @@ Before fitting any models, it is essential to understand the data. Use R or bash
 
 (i) Read the .fam file. How many samples does the dataset contain?
 
-```{r, message=FALSE,warning=FALSE}
+```{r, message=FALSE, warning=FALSE}
 # Loading libraries
 library(data.table)
 library(dplyr)
 library(ggplot2)
 ```
 
-```{r,message=FALSE, warning=FALSE}         
+```{r, message=FALSE, warning=FALSE}         
 fam_all <- fread("../data/gwa.qc.A1.fam")
 colnames(fam_all) <- c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE")
 nrow(fam_all) #4000 samples
